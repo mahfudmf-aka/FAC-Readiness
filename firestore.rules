@@ -1,0 +1,116 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function userStation() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.station;
+    }
+
+    function isSuperadmin() {
+      return isSignedIn() && userRole() == "superadmin";
+    }
+
+    function hasNetworkScope() {
+      return isSuperadmin() || userStation() == "JKT";
+    }
+
+    function canManageData() {
+      return isSignedIn() && userRole() in ["superadmin", "admin"];
+    }
+
+    function canReadStation(station) {
+      return isSignedIn() && (hasNetworkScope() || station == userStation());
+    }
+
+    function canCreateStation(station) {
+      return canManageData() && (hasNetworkScope() || station == userStation());
+    }
+
+    function canUpdateStation(oldStation, newStation) {
+      return canManageData()
+             && (hasNetworkScope()
+                 || (oldStation == userStation() && newStation == userStation()));
+    }
+
+    function canDeleteStation(station) {
+      return canManageData() && (hasNetworkScope() || station == userStation());
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn()
+                  && (request.auth.uid == userId || isSuperadmin());
+      allow create, update, delete: if isSuperadmin();
+    }
+
+    match /facMembers/{memberId} {
+      allow read: if canReadStation(resource.data.station);
+      allow create: if canCreateStation(request.resource.data.station);
+      allow update: if canUpdateStation(resource.data.station, request.resource.data.station);
+      allow delete: if canDeleteStation(resource.data.station);
+    }
+
+    match /equipment/{recordId} {
+      allow read: if canReadStation(resource.data.station);
+      allow create: if canCreateStation(request.resource.data.station);
+      allow update: if canUpdateStation(resource.data.station, request.resource.data.station);
+      allow delete: if canDeleteStation(resource.data.station);
+    }
+
+    match /trainings/{recordId} {
+      allow read: if canReadStation(resource.data.station);
+      allow create: if canCreateStation(request.resource.data.station);
+      allow update: if canUpdateStation(resource.data.station, request.resource.data.station);
+      allow delete: if canDeleteStation(resource.data.station);
+    }
+
+    match /checklistRecords/{recordId} {
+      allow read: if canReadStation(resource.data.station);
+      allow create: if canCreateStation(request.resource.data.station);
+      allow update: if canUpdateStation(resource.data.station, request.resource.data.station);
+      allow delete: if canDeleteStation(resource.data.station);
+    }
+
+    match /facRooms/{recordId} {
+      allow read: if canReadStation(resource.data.station);
+      allow create: if canCreateStation(request.resource.data.station);
+      allow update: if canUpdateStation(resource.data.station, request.resource.data.station);
+      allow delete: if canDeleteStation(resource.data.station);
+    }
+
+    match /partnerships/{recordId} {
+      allow read: if canReadStation(resource.data.station);
+      allow create: if canCreateStation(request.resource.data.station);
+      allow update: if canUpdateStation(resource.data.station, request.resource.data.station);
+      allow delete: if canDeleteStation(resource.data.station);
+    }
+
+    match /checklistTemplates/{templateId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if canManageData();
+    }
+
+    match /settings/{settingId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSuperadmin();
+    }
+
+    match /auditLogs/{logId} {
+      allow read: if isSuperadmin();
+      allow create: if isSignedIn()
+                    && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

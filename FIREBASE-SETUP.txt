@@ -1,0 +1,44 @@
+FAC READINESS PORTAL — FIRESTORE STAGE 1 SETUP
+
+1. FIRESTORE SECURITY RULES
+   - Open Firebase Console > Firestore Database > Rules.
+   - Replace the existing rules with all content from firestore.rules.
+   - Click Publish.
+
+2. USER PROFILE REQUIREMENT
+   Every Firebase Authentication account must have a matching document:
+
+   Collection : users
+   Document ID: the user's Authentication UID
+
+   Required fields:
+   - displayName (string)
+   - email       (string)
+   - role        (string: superadmin, admin, or viewer)
+   - station     (string, uppercase: JKT, DPS, SUB, KNO, etc.)
+   - active      (boolean: true)
+
+3. ACCESS SCOPE
+   - superadmin: network access and Portal Management.
+   - JKT station: network-wide operational data access.
+   - other stations: only records from the same station.
+   - admin: may add, edit, import, and delete operational records.
+   - viewer: read-only access.
+
+4. COLLECTIONS CREATED AUTOMATICALLY
+   The website creates these collections when the first record is saved:
+   - facMembers
+   - equipment
+   - trainings
+   - checklistTemplates
+   - checklistRecords
+   - settings
+   - auditLogs
+
+5. NETLIFY
+   Upload the ZIP once to the existing Netlify site. Changes to records, roles,
+   and stations are then handled in Firebase and do not require another deploy.
+
+6. STAGE 1 LIMITATION
+   File bytes such as PDF, images, and Excel attachments are not uploaded in
+   this stage. Their online upload will be handled later with Firebase Storage.

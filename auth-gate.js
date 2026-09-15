@@ -305,14 +305,18 @@ function attachLogout() {
 
 function reinforcePortalNavigation() {
   const apply = () => {
-    document.querySelectorAll(".sidebar-inner nav button").forEach(button => {
+    const isSuperadmin = window.FAC_AUTH_USER?.role === "superadmin";
+    if (!isSuperadmin && location.hash === "#manage") {
+      location.hash = "#dashboard";
+      requestAnimationFrame(() => document.querySelector('.sidebar-inner nav a[href="#dashboard"]')?.click());
+    }
+    document.querySelectorAll(".sidebar-inner nav button, .sidebar-inner nav a").forEach(button => {
       button.disabled = false;
       button.removeAttribute("aria-disabled");
       if (button.textContent.trim().includes("Portal Management")) {
-        const isSuperadmin = window.FAC_AUTH_USER?.role === "superadmin";
         button.dataset.firebaseRole = window.FAC_AUTH_USER?.role || "";
         button.hidden = !isSuperadmin;
-        button.style.display = isSuperadmin ? "" : "none";
+        button.style.setProperty("display", isSuperadmin ? "" : "none", "important");
         button.title = isSuperadmin ? "Open Portal Management" : "";
         if (!button.dataset.portalScrollFix) {
           button.dataset.portalScrollFix = "true";

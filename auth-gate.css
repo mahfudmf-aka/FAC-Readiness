@@ -190,11 +190,13 @@ body.auth-pending #root {
   align-items: center;
   gap: 11px;
   width: 100%;
-  min-height: 44px;
-  padding: 10px 11px;
+  min-height: 38px;
+  padding: 7px 10px;
   border-radius: 8px;
   color: #fffaf7 !important;
   text-decoration: none;
+  white-space: nowrap;
+  font-size: 14px;
 }
 .sidebar-inner nav a span { flex: 1; min-width: 0; }
 .sidebar-inner nav button:hover,

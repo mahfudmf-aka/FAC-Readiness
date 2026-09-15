@@ -332,7 +332,13 @@ function reinforcePortalNavigation() {
   setTimeout(() => observer.disconnect(), 15000);
 }
 
-function revealPortal() {
+async function revealPortal() {
+  // Load the application only after Firebase has verified the user profile.
+  // This guarantees that React receives the real role on its first render;
+  // previously it could render with the temporary role and leave Portal
+  // Management empty even for a Super Admin.
+  showMessage("Menyiapkan portal sesuai kewenangan akun…");
+  await import("/assets/index-D2PRUK_b.js");
   gate.remove();
   document.body.classList.remove("auth-pending");
   root.removeAttribute("aria-hidden");
@@ -355,14 +361,18 @@ onAuthStateChanged(auth, async user => {
     if (!profileSnapshot.exists()) throw new Error("PROFILE_NOT_FOUND");
     const profile = profileSnapshot.data();
     if (profile.active === false) throw new Error("ACCOUNT_INACTIVE");
+    const normalizedRole = String(profile.role || "viewer")
+      .trim()
+      .toLowerCase()
+      .replace(/[\s_-]+/g, "");
     window.FAC_AUTH_USER = {
       uid: user.uid,
       email: user.email,
       displayName: profile.displayName || user.email,
-      role: profile.role || "viewer",
-      station: profile.station || ""
+      role: normalizedRole,
+      station: String(profile.station || "").trim().toUpperCase()
     };
-    revealPortal();
+    await revealPortal();
   } catch (error) {
     console.error(error);
     await signOut(auth);

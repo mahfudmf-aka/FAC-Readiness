@@ -32,6 +32,20 @@ body.auth-pending #root {
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
+#fac-auth-gate.is-checking-session > * { visibility: hidden; }
+#fac-auth-gate.is-checking-session::after {
+  content: "Memeriksa sesi dan memuat halaman terakhir…";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  padding-top: 48px;
+  color: var(--auth-navy);
+  font-size: 13px;
+  font-weight: 700;
+  background: radial-gradient(circle, var(--auth-orange) 0 7px, transparent 8px) 50% 4px / 34px 34px no-repeat;
+}
+
 .fac-auth-visual {
   position: relative;
   display: flex;
@@ -165,17 +179,36 @@ body.auth-pending #root {
 .sidebar-inner .profile > div:nth-child(2) span { color: rgba(255, 255, 255, .7) !important; font-size: 10px !important; }
 
 /* Restore clear interactive feedback without introducing teal. */
-.sidebar-inner nav button {
+.sidebar-inner nav button,
+.sidebar-inner nav a {
   pointer-events: auto !important;
   cursor: pointer !important;
   transition: color .18s ease, background-color .18s ease, transform .18s ease !important;
 }
-.sidebar-inner nav button:hover {
+.sidebar-inner nav a {
+  display: flex !important;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 11px;
+  border-radius: 8px;
+  color: #fffaf7 !important;
+  text-decoration: none;
+}
+.sidebar-inner nav a span { flex: 1; min-width: 0; }
+.sidebar-inner nav button:hover,
+.sidebar-inner nav a:hover {
   color: #fff !important;
   background: rgba(233, 105, 44, .18) !important;
   transform: translateX(2px);
 }
-.sidebar-inner nav button.active:hover { background: rgba(233, 105, 44, .28) !important; }
+.sidebar-inner nav button.active:hover,
+.sidebar-inner nav a.active {
+  color: #fff !important;
+  background: rgba(255, 255, 255, .2) !important;
+  box-shadow: inset 4px 0 #ffb18c !important;
+}
 button:not(:disabled),
 [role="button"]:not([aria-disabled="true"]),
 .template-card,
@@ -203,7 +236,7 @@ button:not(:disabled),
 .fac-user-admin__heading p { margin: 0; color: #64748b; }
 .fac-user-primary,
 .fac-user-secondary,
-.fac-user-reset {
+.fac-user-action {
   border: 1px solid #d8dee8;
   border-radius: 8px;
   padding: 9px 14px;
@@ -214,9 +247,11 @@ button:not(:disabled),
 }
 .fac-user-primary { border-color: var(--auth-orange); background: var(--auth-orange); color: #fff; }
 .fac-user-primary:hover { background: #c84f18; }
-.fac-user-reset { padding: 7px 10px; font-size: 12px; }
+.fac-user-action { padding: 7px 9px; font-size: 11px; }
+.fac-user-action.danger { color: #b42318; border-color: #fecaca; }
+.fac-user-actions { display: flex; flex-wrap: wrap; gap: 6px; min-width: 250px; }
 .fac-user-primary:disabled,
-.fac-user-reset:disabled { opacity: .55; cursor: wait; }
+.fac-user-action:disabled { opacity: .55; cursor: wait; }
 .fac-user-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

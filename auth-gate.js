@@ -218,6 +218,7 @@ function createGate() {
 }
 
 const gate = createGate();
+gate.classList.add("is-checking-session");
 const form = gate.querySelector("#facLoginForm");
 const emailInput = gate.querySelector("#facLoginEmail");
 const passwordInput = gate.querySelector("#facLoginPassword");
@@ -362,9 +363,10 @@ function installUserManagement() {
         <button type="button" class="fac-user-primary" data-action="show-create">+ Add account</button>
       </div>
       <form class="fac-user-form" hidden>
+        <input name="editUid" type="hidden">
         <label>Employee name<input name="displayName" required autocomplete="off"></label>
-        <label>Email<input name="email" type="email" required autocomplete="off"></label>
-        <label>Temporary password<input name="password" type="password" minlength="8" required autocomplete="new-password"></label>
+        <label class="fac-user-email-field">Email<input name="email" type="email" required autocomplete="off"></label>
+        <label class="fac-user-password-field">Temporary password<input name="password" type="password" minlength="8" required autocomplete="new-password"></label>
         <label>Role<select name="role" required>
           <option value="viewer">Viewer</option>
           <option value="member">FAC Member</option>
@@ -390,6 +392,16 @@ function installUserManagement() {
     const form = panel.querySelector(".fac-user-form");
     const message = panel.querySelector(".fac-user-message");
     const tbody = panel.querySelector("tbody");
+    const formSubmit = form.querySelector('[type="submit"]');
+
+    const resetFormMode = () => {
+      form.reset();
+      form.elements.editUid.value = "";
+      form.elements.email.disabled = false;
+      form.elements.password.required = true;
+      form.querySelector(".fac-user-password-field").hidden = false;
+      formSubmit.textContent = "Create account";
+    };
 
     const setMessage = (text, type = "") => {
       message.textContent = text;
@@ -408,7 +420,12 @@ function installUserManagement() {
             <td>${escapeHTML(user.role || "viewer")}</td>
             <td>${escapeHTML(user.station || "—")}</td>
             <td><span class="fac-user-status ${user.active === false ? "is-inactive" : ""}">${user.active === false ? "Inactive" : "Active"}</span></td>
-            <td><button type="button" class="fac-user-reset" data-email="${escapeHTML(user.email || "")}">Reset password</button></td>
+            <td><div class="fac-user-actions">
+              <button type="button" class="fac-user-action" data-action="edit-user" data-uid="${escapeHTML(user.id)}">Edit</button>
+              <button type="button" class="fac-user-action" data-action="toggle-user" data-uid="${escapeHTML(user.id)}" data-active="${user.active === false ? "false" : "true"}">${user.active === false ? "Activate" : "Deactivate"}</button>
+              <button type="button" class="fac-user-action" data-action="reset-user" data-email="${escapeHTML(user.email || "")}">Reset</button>
+              <button type="button" class="fac-user-action danger" data-action="delete-user" data-uid="${escapeHTML(user.id)}">Delete access</button>
+            </div></td>
           </tr>`).join("") : `<tr><td colspan="6">No portal account profiles found.</td></tr>`;
       } catch (error) {
         console.error(error);
@@ -417,11 +434,12 @@ function installUserManagement() {
     };
 
     panel.querySelector('[data-action="show-create"]').addEventListener("click", () => {
+      resetFormMode();
       form.hidden = false;
       form.querySelector('[name="displayName"]').focus();
     });
     panel.querySelector('[data-action="cancel-create"]').addEventListener("click", () => {
-      form.reset();
+      resetFormMode();
       form.hidden = true;
       setMessage("");
     });
@@ -430,8 +448,9 @@ function installUserManagement() {
       event.preventDefault();
       const submit = form.querySelector('[type="submit"]');
       const values = new FormData(form);
+      const editUid = String(form.elements.editUid.value || "");
       const displayName = String(values.get("displayName") || "").trim();
-      const email = String(values.get("email") || "").trim().toLowerCase();
+      const email = String(form.elements.email.value || "").trim().toLowerCase();
       const password = String(values.get("password") || "");
       const role = String(values.get("role") || "viewer").trim().toLowerCase();
       const station = String(values.get("station") || "").trim().toUpperCase();
@@ -439,8 +458,24 @@ function installUserManagement() {
       let createdUser;
 
       submit.disabled = true;
-      setMessage("Creating Firebase account…");
+      setMessage(editUid ? "Saving account changes…" : "Creating Firebase account…");
       try {
+        if (editUid) {
+          await updateDoc(doc(db, "users", editUid), {
+            displayName,
+            name: displayName,
+            role,
+            station,
+            updatedAt: serverTimestamp(),
+            updatedBy: auth.currentUser.uid
+          });
+          resetFormMode();
+          form.hidden = true;
+          setMessage("");
+          await loadUsers();
+          alert(`Account profile ${email} updated.`);
+          return;
+        }
         secondaryApp = initializeApp(config, `fac-account-${Date.now()}`);
         const secondaryAuth = getAuth(secondaryApp);
         const credential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
@@ -460,7 +495,7 @@ function installUserManagement() {
         });
         await signOut(secondaryAuth);
         await sendPasswordResetEmail(auth, email);
-        form.reset();
+        resetFormMode();
         form.hidden = true;
         setMessage("");
         await loadUsers();
@@ -486,17 +521,51 @@ function installUserManagement() {
     });
 
     panel.addEventListener("click", async event => {
-      const button = event.target.closest(".fac-user-reset");
+      const button = event.target.closest(".fac-user-action");
       if (!button) return;
+      const action = button.dataset.action;
+      const uid = button.dataset.uid;
       const email = button.dataset.email;
-      if (!email || !confirm(`Send password reset email to ${email}?`)) return;
       button.disabled = true;
       try {
-        await sendPasswordResetEmail(auth, email);
-        alert(`Password reset email sent to ${email}.`);
+        if (action === "reset-user") {
+          if (!email || !confirm(`Send password reset email to ${email}?`)) return;
+          await sendPasswordResetEmail(auth, email);
+          alert(`Password reset email sent to ${email}.`);
+        } else if (action === "toggle-user") {
+          if (uid === auth.currentUser.uid) return alert("The account currently in use cannot be deactivated.");
+          const active = button.dataset.active !== "true";
+          await updateDoc(doc(db, "users", uid), {
+            active,
+            status: active ? "active" : "inactive",
+            updatedAt: serverTimestamp(),
+            updatedBy: auth.currentUser.uid
+          });
+          await loadUsers();
+        } else if (action === "edit-user") {
+          const snapshot = await getDoc(doc(db, "users", uid));
+          if (!snapshot.exists()) throw new Error("Profile not found.");
+          const current = snapshot.data();
+          form.elements.editUid.value = uid;
+          form.elements.displayName.value = current.displayName || current.name || "";
+          form.elements.email.value = current.email || "";
+          form.elements.email.disabled = true;
+          form.elements.password.required = false;
+          form.querySelector(".fac-user-password-field").hidden = true;
+          form.elements.role.value = current.role || "viewer";
+          form.elements.station.value = current.station || "";
+          formSubmit.textContent = "Save changes";
+          form.hidden = false;
+          form.scrollIntoView({ behavior: "smooth", block: "center" });
+        } else if (action === "delete-user") {
+          if (uid === auth.currentUser.uid) return alert("The account currently in use cannot be deleted.");
+          if (!confirm("Delete this user's portal access? The Authentication record must be removed separately in Firebase Console.")) return;
+          await deleteDoc(doc(db, "users", uid));
+          await loadUsers();
+        }
       } catch (error) {
         console.error(error);
-        alert("Password reset email could not be sent. Check Firebase Authentication settings.");
+        alert(error.message || "Account action could not be completed.");
       } finally {
         button.disabled = false;
       }
@@ -512,6 +581,30 @@ function installUserManagement() {
   });
   observer.observe(root, { childList: true, subtree: true });
   setTimeout(() => observer.disconnect(), 30000);
+}
+
+async function prepareNotificationPreferences(user) {
+  const preferenceRef = doc(db, "userPreferences", user.uid);
+  let readNotifications = [];
+  try {
+    const snapshot = await getDoc(preferenceRef);
+    if (snapshot.exists() && Array.isArray(snapshot.data().readNotifications)) {
+      readNotifications = snapshot.data().readNotifications.map(String);
+    }
+  } catch (error) {
+    console.error("Notification preferences could not be loaded.", error);
+  }
+  window.FAC_READ_NOTIFICATIONS = readNotifications;
+  window.FAC_NOTIFICATION_STORE = {
+    async markRead(ids) {
+      const next = [...new Set([...window.FAC_READ_NOTIFICATIONS, ...ids.map(String)])];
+      window.FAC_READ_NOTIFICATIONS = next;
+      await setDoc(preferenceRef, {
+        readNotifications: next,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    }
+  };
 }
 
 async function revealPortal() {
@@ -531,6 +624,7 @@ async function revealPortal() {
 
 onAuthStateChanged(auth, async user => {
   if (!user) {
+    gate.classList.remove("is-checking-session");
     document.body.classList.add("auth-pending");
     root.setAttribute("aria-hidden", "true");
     if (!document.body.contains(gate)) location.reload();
@@ -555,6 +649,7 @@ onAuthStateChanged(auth, async user => {
       role: normalizedRole,
       station: String(profile.station || "").trim().toUpperCase()
     };
+    await prepareNotificationPreferences(user);
     await revealPortal();
   } catch (error) {
     console.error(error);

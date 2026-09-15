@@ -50,6 +50,11 @@ service cloud.firestore {
       allow create, update, delete: if isSuperadmin();
     }
 
+    match /userPreferences/{userId} {
+      allow read, create, update: if isSignedIn() && request.auth.uid == userId;
+      allow delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
     match /facMembers/{memberId} {
       allow read: if canReadStation(resource.data.station);
       allow create: if canCreateStation(request.resource.data.station);

@@ -1,6 +1,8 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
+import { deleteApp, initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
 import {
   browserLocalPersistence,
+  createUserWithEmailAndPassword,
+  deleteUser,
   getAuth,
   onAuthStateChanged,
   sendPasswordResetEmail,
@@ -18,6 +20,7 @@ import {
   getFirestore,
   query,
   serverTimestamp,
+  setDoc,
   updateDoc,
   where,
   writeBatch
@@ -332,6 +335,185 @@ function reinforcePortalNavigation() {
   setTimeout(() => observer.disconnect(), 15000);
 }
 
+function escapeHTML(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function installUserManagement() {
+  if (window.FAC_AUTH_USER?.role !== "superadmin") return;
+
+  const install = () => {
+    const panels = [...document.querySelectorAll(".management-grid section")];
+    const panel = panels.find(item => item.querySelector("h3")?.textContent.trim() === "User & Access Management");
+    if (!panel || panel.dataset.firebaseUsers === "ready") return false;
+    panel.dataset.firebaseUsers = "ready";
+    panel.classList.add("fac-user-admin");
+    panel.innerHTML = `
+      <div class="fac-user-admin__heading">
+        <div>
+          <h3>User & Access Management</h3>
+          <p>Create portal accounts and connect Authentication with Firestore automatically.</p>
+        </div>
+        <button type="button" class="fac-user-primary" data-action="show-create">+ Add account</button>
+      </div>
+      <form class="fac-user-form" hidden>
+        <label>Employee name<input name="displayName" required autocomplete="off"></label>
+        <label>Email<input name="email" type="email" required autocomplete="off"></label>
+        <label>Temporary password<input name="password" type="password" minlength="8" required autocomplete="new-password"></label>
+        <label>Role<select name="role" required>
+          <option value="viewer">Viewer</option>
+          <option value="member">FAC Member</option>
+          <option value="coordinator">FAC Coordinator</option>
+          <option value="admin">Admin</option>
+          <option value="superadmin">Super Admin</option>
+        </select></label>
+        <label>Station<input name="station" required maxlength="5" placeholder="e.g. JKT, CGK, DPS" autocomplete="off"></label>
+        <div class="fac-user-form__actions">
+          <button type="button" class="fac-user-secondary" data-action="cancel-create">Cancel</button>
+          <button type="submit" class="fac-user-primary">Create account</button>
+        </div>
+        <p class="fac-user-message" aria-live="polite"></p>
+      </form>
+      <div class="fac-user-table-wrap">
+        <table class="fac-user-table">
+          <thead><tr><th>User</th><th>Email</th><th>Role</th><th>Station</th><th>Status</th><th>Action</th></tr></thead>
+          <tbody><tr><td colspan="6">Loading accounts…</td></tr></tbody>
+        </table>
+      </div>
+      <p class="access-note">Passwords are never stored in Firestore. Reset password sends an official Firebase email to the account owner.</p>`;
+
+    const form = panel.querySelector(".fac-user-form");
+    const message = panel.querySelector(".fac-user-message");
+    const tbody = panel.querySelector("tbody");
+
+    const setMessage = (text, type = "") => {
+      message.textContent = text;
+      message.dataset.type = type;
+    };
+
+    const loadUsers = async () => {
+      try {
+        const snapshot = await getDocs(collection(db, "users"));
+        const users = snapshot.docs.map(item => ({ id: item.id, ...item.data() }))
+          .sort((left, right) => String(left.displayName || left.name || left.email).localeCompare(String(right.displayName || right.name || right.email)));
+        tbody.innerHTML = users.length ? users.map(user => `
+          <tr>
+            <td>${escapeHTML(user.displayName || user.name || "—")}</td>
+            <td>${escapeHTML(user.email || "—")}</td>
+            <td>${escapeHTML(user.role || "viewer")}</td>
+            <td>${escapeHTML(user.station || "—")}</td>
+            <td><span class="fac-user-status ${user.active === false ? "is-inactive" : ""}">${user.active === false ? "Inactive" : "Active"}</span></td>
+            <td><button type="button" class="fac-user-reset" data-email="${escapeHTML(user.email || "")}">Reset password</button></td>
+          </tr>`).join("") : `<tr><td colspan="6">No portal account profiles found.</td></tr>`;
+      } catch (error) {
+        console.error(error);
+        tbody.innerHTML = `<tr><td colspan="6">Accounts could not be loaded. Check Firestore Rules.</td></tr>`;
+      }
+    };
+
+    panel.querySelector('[data-action="show-create"]').addEventListener("click", () => {
+      form.hidden = false;
+      form.querySelector('[name="displayName"]').focus();
+    });
+    panel.querySelector('[data-action="cancel-create"]').addEventListener("click", () => {
+      form.reset();
+      form.hidden = true;
+      setMessage("");
+    });
+
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
+      const submit = form.querySelector('[type="submit"]');
+      const values = new FormData(form);
+      const displayName = String(values.get("displayName") || "").trim();
+      const email = String(values.get("email") || "").trim().toLowerCase();
+      const password = String(values.get("password") || "");
+      const role = String(values.get("role") || "viewer").trim().toLowerCase();
+      const station = String(values.get("station") || "").trim().toUpperCase();
+      let secondaryApp;
+      let createdUser;
+
+      submit.disabled = true;
+      setMessage("Creating Firebase account…");
+      try {
+        secondaryApp = initializeApp(config, `fac-account-${Date.now()}`);
+        const secondaryAuth = getAuth(secondaryApp);
+        const credential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+        createdUser = credential.user;
+        await setDoc(doc(db, "users", createdUser.uid), {
+          uid: createdUser.uid,
+          displayName,
+          name: displayName,
+          email,
+          role,
+          station,
+          active: true,
+          status: "active",
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          createdBy: auth.currentUser.uid
+        });
+        await signOut(secondaryAuth);
+        await sendPasswordResetEmail(auth, email);
+        form.reset();
+        form.hidden = true;
+        setMessage("");
+        await loadUsers();
+        alert(`Account ${email} created. Firebase password setup email has been sent.`);
+      } catch (error) {
+        console.error(error);
+        if (createdUser) {
+          try { await deleteUser(createdUser); } catch (rollbackError) { console.error(rollbackError); }
+        }
+        const knownMessages = {
+          "auth/email-already-in-use": "Email is already registered in Firebase Authentication.",
+          "auth/invalid-email": "Email format is invalid.",
+          "auth/weak-password": "Temporary password must contain at least 8 characters.",
+          "permission-denied": "Firestore rejected the profile. Confirm the current account role is exactly superadmin."
+        };
+        setMessage(knownMessages[error.code] || error.message || "Account could not be created.", "error");
+      } finally {
+        if (secondaryApp) {
+          try { await deleteApp(secondaryApp); } catch (cleanupError) { console.error(cleanupError); }
+        }
+        submit.disabled = false;
+      }
+    });
+
+    panel.addEventListener("click", async event => {
+      const button = event.target.closest(".fac-user-reset");
+      if (!button) return;
+      const email = button.dataset.email;
+      if (!email || !confirm(`Send password reset email to ${email}?`)) return;
+      button.disabled = true;
+      try {
+        await sendPasswordResetEmail(auth, email);
+        alert(`Password reset email sent to ${email}.`);
+      } catch (error) {
+        console.error(error);
+        alert("Password reset email could not be sent. Check Firebase Authentication settings.");
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    loadUsers();
+    return true;
+  };
+
+  if (install()) return;
+  const observer = new MutationObserver(() => {
+    if (install()) observer.disconnect();
+  });
+  observer.observe(root, { childList: true, subtree: true });
+  setTimeout(() => observer.disconnect(), 30000);
+}
+
 async function revealPortal() {
   // Load the application only after Firebase has verified the user profile.
   // This guarantees that React receives the real role on its first render;
@@ -344,6 +526,7 @@ async function revealPortal() {
   root.removeAttribute("aria-hidden");
   attachLogout();
   reinforcePortalNavigation();
+  installUserManagement();
 }
 
 onAuthStateChanged(auth, async user => {

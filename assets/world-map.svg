@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 500">
+  <rect width="1000" height="500" fill="#dceff4"/>
+  <g fill="#edf0e5" stroke="#b6c9c4" stroke-width="1.4">
+    <path d="M45 95L92 48l78-18 89 18 54 45-19 42-58 12-29 44-54-10-35-33-60-7z"/>
+    <path d="M235 200l46 13 30 48-9 61-38 105-25-62 8-70-29-52z"/>
+    <path d="M420 76l66-31 83 17 34 32-30 34-68 6-39-18-47 10-30-25z"/>
+    <path d="M470 145l79-11 72 55-11 100-52 106-42-48-20-76-53-75z"/>
+    <path d="M555 83l116-45 160 19 118 62-31 70-95-2-42 47-77-23-53-41-70-24z"/>
+    <path d="M795 298l92-30 68 48-25 61-89 7-51-47z"/>
+    <path d="M700 220l22 8 11 20-18 12-26-12zM746 236l12 7-4 19-18-4zM780 250l29 6 17 20-35 4zM825 242l12 8-4 16-14-3z"/>
+  </g>
+  <g fill="#79989a" font-family="Arial" font-size="12" font-weight="700" opacity=".72">
+    <text x="145" y="118">AMERICA</text><text x="472" y="101">EUROPE</text><text x="512" y="252">AFRICA</text><text x="711" y="130">ASIA</text><text x="800" y="345">AUSTRALIA</text>
+  </g>
+</svg>

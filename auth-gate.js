@@ -88,8 +88,13 @@ function cleanData(value) {
 
 function scopedData(name, value, profile) {
   const data = cleanData(value);
-  if (stationScopedCollections.has(name) && !hasNetworkScope(profile)) {
-    data.station = String(profile.station || "").toUpperCase();
+  if (stationScopedCollections.has(name)) {
+    // Station users are always limited to their own station. Network users
+    // may choose another station, but a missing value must never create an
+    // unscoped record that other users cannot query.
+    data.station = String(
+      hasNetworkScope(profile) ? (data.station || profile.station || "JKT") : profile.station
+    ).trim().toUpperCase();
   } else if (data.station) {
     data.station = String(data.station).toUpperCase();
   }
